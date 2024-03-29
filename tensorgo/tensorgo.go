@@ -7,17 +7,12 @@ import (
 )
 
 type MultiLayeredPerceptron struct {
-	layers  []Layer
-	act_fun ActivationFunction
+	layers []Layer
 }
 
 type ActivationFunction struct {
 	eval       func(float64) float64
 	derivative func(float64) float64
-}
-
-type gradient struct {
-	layer_index int
 }
 
 type Layer interface {
