@@ -3,6 +3,7 @@ package tensorgo
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 )
 
@@ -10,9 +11,31 @@ type MultiLayeredPerceptron struct {
 	layers []Layer
 }
 
-type ActivationFunction struct {
-	eval       func(float64) float64
-	derivative func(float64) float64
+func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, err error) {
+	inputs := make([]float64, mlp.layers[0].inputShape())
+	var outputs []float64
+	for layerIndex := 0; layerIndex < len(mlp.layers)-1; layerIndex++ {
+		outputs, err = mlp.layers[layerIndex].evaluate(inputs)
+		if err != nil {
+			return nil, err
+		}
+
+		inputs = outputs
+	}
+	return outputs, nil
+}
+
+type ActivationFunction interface {
+	eval(float64) float64
+	derivative(float64) float64
+}
+type SigmoidActFun struct{}
+
+func (saf SigmoidActFun) eval(in float64) float64 {
+	return 1 / (1 + math.Exp(0-in))
+}
+func (saf SigmoidActFun) derivative(in float64) float64 {
+	return saf.eval(in) * (1 - saf.eval(in))
 }
 
 type Layer interface {
@@ -57,7 +80,7 @@ func (ol OutputLayer) evaluate(input []float64) (output []float64, err error) {
 	output = make([]float64, ol.input_shape)
 
 	for i := 0; i < ol.input_shape; i++ {
-		output = append(output, rand.Float64())
+		output[i] = ol.act_fun.eval(input[i])
 	}
 
 	return output, nil
