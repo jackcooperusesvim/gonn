@@ -3,12 +3,14 @@ package tensorgo
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 )
 
 type MultiLayeredPerceptron struct {
-	layers []Layer
+	layers   []PerceptronLayer
+	outlayer OutputLayer
 }
 
 func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, err error) {
@@ -25,15 +27,42 @@ func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, e
 	return outputs, nil
 }
 
+func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
+	//FIX: There is something wrong here where the last layer touched by this loop fails to link properly
+	// and throws an "uninitialized and no output layer"
+	finalindex := len(mlp.layers) - 1
+	for i := 0; i < finalindex-1; i++ {
+		mlp.layers[i] = mlp.layers[i].link(mlp.layers[i+1])
+	}
+	mlp.layers[finalindex] = mlp.layers[finalindex].link(mlp.outlayer)
+	return mlp
+}
+
+func (mlp MultiLayeredPerceptron) inputShape() int {
+	return mlp.layers[0].inputShape()
+}
+
+func (mlp MultiLayeredPerceptron) is_ready() (outb bool, erindex int, oute error) {
+	for i, layer := range mlp.layers {
+		outb, oute = layer.is_ready()
+		if !outb {
+			return outb, i, oute
+		}
+	}
+	return outb, 0, oute
+}
+
 type ActivationFunction interface {
 	eval(float64) float64
 	derivative(float64) float64
 }
+
 type SigmoidActFun struct{}
 
 func (saf SigmoidActFun) eval(in float64) float64 {
 	return 1 / (1 + math.Exp(0-in))
 }
+
 func (saf SigmoidActFun) derivative(in float64) float64 {
 	return saf.eval(in) * (1 - saf.eval(in))
 }
@@ -50,8 +79,7 @@ type OutputLayer struct {
 	act_fun     ActivationFunction
 }
 
-func build_OutputLayer(neuron_count int, act_fun ActivationFunction) OutputLayer {
-	ol := OutputLayer{}
+func build_OutputLayer(neuron_count int, act_fun ActivationFunction) (ol OutputLayer) {
 	ol.input_shape = neuron_count
 	ol.act_fun = act_fun
 	ol.biases = make([]float64, neuron_count)
@@ -95,32 +123,44 @@ type PerceptronLayer struct {
 	initialized bool
 }
 
-func build_PerceptronLayer(neuron_count int, act_fun ActivationFunction) {
-	pl := PerceptronLayer{}
+func build_PerceptronLayer(neuron_count int, act_fun ActivationFunction) (pl PerceptronLayer) {
 	pl.input_shape = neuron_count
 	pl.act_fun = act_fun
 	pl.biases = make([]float64, neuron_count)
 	for index := 0; index < neuron_count; index++ {
 		pl.biases[index] = rand.Float64()
 	}
+	return pl
 
 }
 
 func (pl PerceptronLayer) inputShape() int {
 	return pl.input_shape
 }
+func (pl PerceptronLayer) summaryStr() (out string) {
+	out = fmt.Sprintf("Summary: \n\tinput_shape: %v\n\tcount of out_weights neuron connections: %v\n\tcount of out_weights output connections: %v\n\tcount of biases: %v\n\tnext layer input shape: %v\n\tinitialized? : %v\n\nweight summary:\n",
+		pl.input_shape, len(pl.out_weights), len(pl.out_weights[0]), len(pl.biases), pl.next_layer.inputShape(), pl.initialized)
 
-func (pl PerceptronLayer) initialize(next_layer Layer) PerceptronLayer {
+	for i, node := range pl.out_weights {
+		out = fmt.Sprintf("%s\tnode #%v outputs\n", out, i)
+		for j, outweight := range node {
+			out = fmt.Sprintf("%s\t\tweight #%v : %v\n", out, j, outweight)
+		}
+	}
+	return out
+}
+
+func (pl PerceptronLayer) link(next_layer Layer) PerceptronLayer {
 	pl.out_weights = make([][]float64, pl.input_shape)
 	pl.next_layer = next_layer
 	for i := 0; i < pl.input_shape; i++ {
-		nodeslice := make([]float64, pl.next_layer.inputShape())
+		pl.out_weights[i] = make([]float64, pl.next_layer.inputShape())
 		for j := 0; j < pl.next_layer.inputShape(); j++ {
-			nodeslice = append(nodeslice, rand.Float64())
+			pl.out_weights[i][j] = rand.Float64()
 		}
-		pl.out_weights = append(pl.out_weights, nodeslice)
 	}
 	pl.initialized = true
+	// fmt.Printf(pl.summaryStr())
 	return pl
 }
 
@@ -134,6 +174,7 @@ func (pl PerceptronLayer) is_ready() (bool, error) {
 
 	var err_base string
 	var err_conn string
+
 	if pl.initialized {
 		err_base = "PerceptronLayer is labeled as initialized"
 		err_conn = "but"
@@ -141,12 +182,15 @@ func (pl PerceptronLayer) is_ready() (bool, error) {
 		err_base = "PerceptronLayer is un-initialized"
 		err_conn = "and"
 	}
+
 	if pl.next_layer == nil {
 		return false, errors.New(fmt.Sprintf("%s %s has no output layer", err_base, err_conn))
 	}
+
 	if pl.out_weights == nil {
 		return false, errors.New(fmt.Sprintf("%s %s has no output_weights", err_base, err_conn))
 	}
+
 	weight_current_layer_dim := len(pl.out_weights)
 	if weight_current_layer_dim == pl.inputShape() {
 		weight_next_layer_dim := len(pl.out_weights[0])
@@ -180,4 +224,32 @@ func (pl PerceptronLayer) evaluate(input []float64) (output []float64, err error
 		}
 	}
 	return output, nil
+}
+
+func CompleteMLP() {
+	saf := SigmoidActFun{}
+	mlp := MultiLayeredPerceptron{}
+	mlp.layers = []PerceptronLayer{
+		build_PerceptronLayer(3, saf),
+		build_PerceptronLayer(5, saf),
+		build_PerceptronLayer(7, saf),
+		build_PerceptronLayer(5, saf),
+		build_PerceptronLayer(3, saf),
+		build_PerceptronLayer(3, saf),
+	}
+	mlp.outlayer = build_OutputLayer(3, saf)
+	mlp.link()
+	ready, layerer, err := mlp.is_ready()
+	if !ready {
+		fmt.Printf("bad layer:%v\n", layerer)
+		log.Fatal(err)
+	}
+	input := []float64{1, 1, 1}
+	output, err := mlp.evaluate(input)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for num, index := range output {
+		fmt.Printf("index %v: %v\n", index, num)
+	}
 }
