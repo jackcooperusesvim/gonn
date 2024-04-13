@@ -31,7 +31,7 @@ func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
 	//FIX: There is something wrong here where the last layer touched by this loop fails to link properly
 	// and throws an "uninitialized and no output layer"
 	finalindex := len(mlp.layers) - 1
-	for i := 0; i < finalindex-1; i++ {
+	for i := 0; i <= finalindex-1; i++ {
 		mlp.layers[i] = mlp.layers[i].link(mlp.layers[i+1])
 	}
 	mlp.layers[finalindex] = mlp.layers[finalindex].link(mlp.outlayer)
@@ -137,6 +137,7 @@ func build_PerceptronLayer(neuron_count int, act_fun ActivationFunction) (pl Per
 func (pl PerceptronLayer) inputShape() int {
 	return pl.input_shape
 }
+
 func (pl PerceptronLayer) summaryStr() (out string) {
 	out = fmt.Sprintf("Summary: \n\tinput_shape: %v\n\tcount of out_weights neuron connections: %v\n\tcount of out_weights output connections: %v\n\tcount of biases: %v\n\tnext layer input shape: %v\n\tinitialized? : %v\n\nweight summary:\n",
 		pl.input_shape, len(pl.out_weights), len(pl.out_weights[0]), len(pl.biases), pl.next_layer.inputShape(), pl.initialized)
@@ -151,6 +152,10 @@ func (pl PerceptronLayer) summaryStr() (out string) {
 }
 
 func (pl PerceptronLayer) link(next_layer Layer) PerceptronLayer {
+	if pl.initialized {
+		return pl
+	}
+
 	pl.out_weights = make([][]float64, pl.input_shape)
 	pl.next_layer = next_layer
 	for i := 0; i < pl.input_shape; i++ {
@@ -226,6 +231,21 @@ func (pl PerceptronLayer) evaluate(input []float64) (output []float64, err error
 	return output, nil
 }
 
+func InitMLP(node_count []int, output_shape int) (mlp MultiLayeredPerceptron, _ error) {
+	saf := SigmoidActFun{}
+	for _, nodes := range node_count {
+		mlp.layers = append(mlp.layers, build_PerceptronLayer(nodes, saf))
+	}
+
+	mlp.outlayer = build_OutputLayer(output_shape, saf)
+	mlp.link()
+	_, _, err := mlp.is_ready()
+	if err != nil {
+		return mlp, err
+	}
+	return mlp, nil
+}
+
 func CompleteMLP() {
 	saf := SigmoidActFun{}
 	mlp := MultiLayeredPerceptron{}
@@ -249,7 +269,7 @@ func CompleteMLP() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for num, index := range output {
-		fmt.Printf("index %v: %v\n", index, num)
+	for index, out := range output {
+		fmt.Printf("index %v: %v\n", index, out)
 	}
 }
