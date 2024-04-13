@@ -1,6 +1,7 @@
 package tensorgo
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -8,9 +9,17 @@ import (
 	"math/rand"
 )
 
+const sep = "/"
+const supsep = "|"
+
 type MultiLayeredPerceptron struct {
 	layers   []PerceptronLayer
 	outlayer OutputLayer
+}
+type layer_gradient struct {
+	weight_gradient   []float64
+	bias_gradient     []float64
+	backprop_gradient []float64
 }
 
 func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, err error) {
@@ -24,6 +33,94 @@ func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, e
 		inputs = outputs
 	}
 	return outputs, nil
+}
+
+func retnone() int {
+	return -1
+}
+
+func (mlp MultiLayeredPerceptron) weight_file() ([]byte, error) {
+
+	// This is the function which turns model weights into a file, which can be later read to re-create the model.
+	// The file is split into two main sections the header and parameter sections.
+	//	Header: Contains important data for parsing the rest of the function
+	//		Integers representing the size of each layer are held in byte form and are
+	//		seperated by the number -1 in byte form, which functions as a seperator.
+	//
+	//		To seperate the header from the parameter, the header section ends with a seperator byte equivilant
+	//			to the rune '|'.
+
+	//	Parameter: Contains the data about the weights and biases of the model. These are seperated by the byte equivilant
+	//		to the float64 420.0. Nice.
+	//
+	//		Weights: This section contains the layer weights. It is contiguous. Seperation has to be
+	//			inferenced from the header
+	//
+	//		Biases: This section contains the layer biases. It is contiguous. Seperation has to be
+	//			inferenced from the header
+
+	supsep := byte('|')
+	paramsep := Float64ToBytes(420.0)
+	headsep := byte(retnone())
+
+	_, _, err := mlp.is_ready()
+	if err != nil {
+		return nil, err
+	}
+
+	filebytes := []byte{}
+	headerbytes := []byte{}
+
+	weightbytes := [][8]byte{}
+	biasbytes := [][8]byte{}
+	filebytes[0] = supsep
+
+	for _, layer := range mlp.layers {
+
+		headerbytes = append(headerbytes, byte(layer.inputShape()))
+		headerbytes = append(headerbytes, headsep)
+
+		size := len(layer.out_weights) * len(layer.out_weights[0])
+
+		weightbytes = make([][8]byte, size)
+		biasbytes = make([][8]byte, len(layer.biases))
+
+		for _, bias := range layer.biases {
+			biasbytes = append(biasbytes, Float64ToBytes(bias))
+			biasbytes = append(biasbytes, paramsep)
+		}
+
+		for _, subarr := range layer.out_weights {
+			for _, weight := range subarr {
+				weightbytes = append(weightbytes, Float64ToBytes(weight))
+				weightbytes = append(weightbytes, paramsep)
+			}
+		}
+
+	}
+}
+
+func Float64ToBytes(f float64) [8]byte {
+	out := [8]byte{}
+	binary.PutUvarint(out[:], math.Float64bits(f))
+	return out
+}
+
+func BytesToFloat64(b [8]byte) (float64, error) {
+	uint, errint := binary.Uvarint(b[:])
+	if errint < 0 {
+		return 0, errors.New("Value is too large for binary.Uvarint")
+	}
+	if errint == 0 {
+		return 0, errors.New("input buffer to small for binary.Uvarint. Size matters...")
+	}
+	return math.Float64frombits(uint), nil
+}
+
+func (mlp MultiLayeredPerceptron) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
+}
+
+func (l PerceptronLayer) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
 }
 
 func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
