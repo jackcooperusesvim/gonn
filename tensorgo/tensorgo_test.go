@@ -1,7 +1,7 @@
 package tensorgo_test
 
 import (
-	. "tensorgo"
+	. "gonn/tensorgo"
 	"testing"
 )
 
