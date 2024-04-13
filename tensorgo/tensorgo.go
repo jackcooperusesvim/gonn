@@ -21,15 +21,12 @@ func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, e
 		if err != nil {
 			return nil, err
 		}
-
 		inputs = outputs
 	}
 	return outputs, nil
 }
 
 func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
-	//FIX: There is something wrong here where the last layer touched by this loop fails to link properly
-	// and throws an "uninitialized and no output layer"
 	finalindex := len(mlp.layers) - 1
 	for i := 0; i <= finalindex-1; i++ {
 		mlp.layers[i] = mlp.layers[i].link(mlp.layers[i+1])
@@ -50,6 +47,17 @@ func (mlp MultiLayeredPerceptron) is_ready() (outb bool, erindex int, oute error
 		}
 	}
 	return outb, 0, oute
+}
+
+//I figured it would be easier for the backprop if we just measured indivitual costs with a
+//function and then added them together when needed
+
+func IndividualCostMSE(actual []float64, expected []float64) []float64 {
+	costs := make([]float64, len(actual))
+	for index := range actual {
+		costs[index] = (expected[index] - actual[index]) * (expected[index] - actual[index])
+	}
+	return costs
 }
 
 type ActivationFunction interface {
