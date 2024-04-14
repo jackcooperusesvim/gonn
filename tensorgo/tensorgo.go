@@ -38,8 +38,12 @@ func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, e
 func retnone() int {
 	return -1
 }
+func mlp_from_binary([]byte) (mlp MultiLayeredPerceptron) {
+	return
+}
 
-func (mlp MultiLayeredPerceptron) weight_file() ([]byte, error) {
+func (mlp MultiLayeredPerceptron) to_binary() ([]byte, error) {
+	//TODO: ADD THE EXTRA INFORMATION: Output Layer, initialized, etc...
 
 	// This is the function which turns model weights into a file, which can be later read to re-create the model.
 	// The file is split into two main sections the header and parameter sections.
@@ -59,13 +63,17 @@ func (mlp MultiLayeredPerceptron) weight_file() ([]byte, error) {
 	//		Biases: This section contains the layer biases. It is contiguous. Seperation has to be
 	//			inferenced from the header
 
-	supsep := byte('|')
-	paramsep := Float64ToBytes(420.0)
-	headsep := byte(retnone())
+	supersep := byte('|')
+	paramsep := Float64ToBytes(420)
 
 	_, _, err := mlp.is_ready()
 	if err != nil {
 		return nil, err
+	}
+	var tot_weights int
+	var tot_biases int
+	for _, layer := range mlp.layers {
+		tot_weights += len(layer.out_weights) * len(layer.out_weights[0])
 	}
 
 	filebytes := []byte{}
@@ -73,31 +81,44 @@ func (mlp MultiLayeredPerceptron) weight_file() ([]byte, error) {
 
 	weightbytes := [][8]byte{}
 	biasbytes := [][8]byte{}
-	filebytes[0] = supsep
+	weightbytes = make([][8]byte, tot_weights)
+	biasbytes = make([][8]byte, tot_biases)
 
+	//arrange all the information by section
 	for _, layer := range mlp.layers {
 
 		headerbytes = append(headerbytes, byte(layer.inputShape()))
-		headerbytes = append(headerbytes, headsep)
 
 		size := len(layer.out_weights) * len(layer.out_weights[0])
 
 		weightbytes = make([][8]byte, size)
-		biasbytes = make([][8]byte, len(layer.biases))
 
 		for _, bias := range layer.biases {
 			biasbytes = append(biasbytes, Float64ToBytes(bias))
-			biasbytes = append(biasbytes, paramsep)
 		}
 
 		for _, subarr := range layer.out_weights {
 			for _, weight := range subarr {
 				weightbytes = append(weightbytes, Float64ToBytes(weight))
-				weightbytes = append(weightbytes, paramsep)
 			}
 		}
 
 	}
+
+	//compile sections
+	copy(filebytes, headerbytes)
+	filebytes = append(filebytes, supersep)
+
+	for _, float := range weightbytes {
+		filebytes = append(filebytes, float[:]...)
+	}
+
+	filebytes = append(filebytes, paramsep[:]...)
+	for _, float := range biasbytes {
+		filebytes = append(filebytes, float[:]...)
+	}
+
+	return filebytes, nil
 }
 
 func Float64ToBytes(f float64) [8]byte {
