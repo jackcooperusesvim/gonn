@@ -9,13 +9,18 @@ import (
 	"math/rand"
 )
 
-const sep = "/"
-const supsep = "|"
+func supsep() []byte {
+	return Int64ToBytes(int64(-69))
+}
+func paramsep() []byte {
+	return Int64ToBytes(int64(420))
+}
 
 type MultiLayeredPerceptron struct {
 	layers   []PerceptronLayer
 	outlayer OutputLayer
 }
+
 type layer_gradient struct {
 	weight_gradient   []float64
 	bias_gradient     []float64
@@ -35,27 +40,30 @@ func (mlp MultiLayeredPerceptron) evaluate(input []float64) (output []float64, e
 	return outputs, nil
 }
 
-func retnone() int32 {
+func retnone() int64 {
 	return -1
 }
-func mlp_from_binary([]byte) (mlp MultiLayeredPerceptron) {
+func mlp_from_binary(file []byte) (mlp MultiLayeredPerceptron) {
+	header := byte.Split(file, []byte)
+
+	mlp.layers := append(mlp.layers)
 	return
 }
 
 func (mlp MultiLayeredPerceptron) to_binary() ([]byte, error) {
 	//TODO: ADD THE EXTRA INFORMATION: Output Layer, initialized, etc...
 
-	// This is the function which turns model weights int32o a file, which can be later read to re-create the model.
-	// The file is split int32o two main sections the header and parameter sections.
+	// This is the function which turns model weights int64o a file, which can be later read to re-create the model.
+	// The file is split int64o two main sections the header and parameter sections.
 	//	Header: Contains important data for parsing the rest of the function
-	//		int32egers representing the size of each layer are held in byte form and are
-	//		seperated by the number -1 in byte form, which functions as a seperator.
+	//		int64egers representing the size of each layer are held in byte form and are
+	//		seperated by the number -69 in byte form which functions as a seperator between the header and the parameter section.
 	//
 	//		To seperate the header from the parameter, the header section ends with a seperator byte equivilant
 	//			to the rune '|' and then the size of the output layer. It may be possible that th
-
+	//
 	//	Parameter: Contains the data about the weights and biases of the model. These are seperated by the byte equivilant
-	//		to the float64 420.0. Nice.
+	//		to the float64 420.0.
 	//
 	//		Weights: This section contains the layer weights. It is contiguous. Seperation has to be
 	//			inferenced from the header
@@ -63,75 +71,74 @@ func (mlp MultiLayeredPerceptron) to_binary() ([]byte, error) {
 	//		Biases: This section contains the layer biases. It is contiguous. Seperation has to be
 	//			inferenced from the header
 
-	supersep := byte('|')
+	supersep := Int64ToBytes(int64(-69))
 	paramsep := Float64ToBytes(420)
 
 	_, _, err := mlp.is_ready()
 	if err != nil {
 		return nil, err
 	}
-	var tot_weights int32
-	var tot_biases int32
+	var tot_weights int64
+	var tot_biases int64
 	for _, layer := range mlp.layers {
-		tot_weights += int32(len(layer.out_weights) * len(layer.out_weights[0]))
+		tot_weights += int64(len(layer.out_weights) * len(layer.out_weights[0]))
+		tot_biases += int64(len(layer.biases))
 	}
 
 	filebytes := []byte{}
 	headerbytes := []byte{}
 
-	weightbytes := [][8]byte{}
-	biasbytes := [][8]byte{}
-	weightbytes = make([][8]byte, tot_weights)
-	biasbytes = make([][8]byte, tot_biases)
+	weightbytes := make([]byte, tot_weights)
+	biasbytes := make([]byte, tot_biases)
 
 	//arrange all the information by section
 	for _, layer := range mlp.layers {
 
 		headerbytes = append(headerbytes, byte(layer.inputShape()))
 
-		size := len(layer.out_weights) * len(layer.out_weights[0])
-
-		weightbytes = make([][8]byte, size)
-
 		for _, bias := range layer.biases {
-			biasbytes = append(biasbytes, Float64ToBytes(bias))
+			biasbytes = append(biasbytes, Float64ToBytes(bias)...)
 		}
 
 		for _, subarr := range layer.out_weights {
 			for _, weight := range subarr {
-				weightbytes = append(weightbytes, Float64ToBytes(weight))
+				weightbytes = append(weightbytes, Float64ToBytes(weight)...)
 			}
 		}
 
 	}
 	//add output layer
+	for _, bias := range mlp.outlayer.biases {
+		biasbytes = append(biasbytes, Float64ToBytes(bias)...)
+	}
 
 	//compile sections
 	copy(filebytes, headerbytes)
-	filebytes = append(filebytes, supersep)
+	filebytes = append(filebytes, supersep[:]...)
 
-	for _, float := range weightbytes {
-		filebytes = append(filebytes, float[:]...)
+	for _, byt := range weightbytes {
+		filebytes = append(filebytes, byt)
 	}
 
 	filebytes = append(filebytes, paramsep[:]...)
-	for _, float := range biasbytes {
-		filebytes = append(filebytes, float[:]...)
+
+	for _, byt := range biasbytes {
+		filebytes = append(filebytes, byt)
 	}
 
 	return filebytes, nil
 }
 
-// func int32ToBytes(i int32) [4]byte {
-// 	out := [4]byte{}
-// 	binary.PutUvarint32(out[:])
-// 	return out
-// }
+func Int64ToBytes(i int64) []byte {
+	out := [8]byte{}
+	binary.PutVarint(out[:], i)
+	return out[:]
+}
 
-func Float64ToBytes(f float64) [8]byte {
+func Float64ToBytes(f float64) []byte {
 	out := [8]byte{}
 	binary.PutUvarint(out[:], math.Float64bits(f))
-	return out
+	return out[:]
 }
 
 func BytesToFloat64(b [8]byte) (float64, error) {
@@ -145,11 +152,11 @@ func BytesToFloat64(b [8]byte) (float64, error) {
 	return math.Float64frombits(uint), nil
 }
 
-func (mlp MultiLayeredPerceptron) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
-}
-
-func (l PerceptronLayer) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
-}
+// func (mlp MultiLayeredPerceptron) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
+// }
+//
+// func (l PerceptronLayer) calculate_gradients(next_layer_grad []layer_gradient) []layer_gradient {
+// }
 
 func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
 	finalindex := len(mlp.layers) - 1
@@ -160,15 +167,15 @@ func (mlp MultiLayeredPerceptron) link() MultiLayeredPerceptron {
 	return mlp
 }
 
-func (mlp MultiLayeredPerceptron) inputShape() int32 {
+func (mlp MultiLayeredPerceptron) inputShape() int64 {
 	return mlp.layers[0].inputShape()
 }
 
-func (mlp MultiLayeredPerceptron) is_ready() (outb bool, erindex int32, oute error) {
+func (mlp MultiLayeredPerceptron) is_ready() (outb bool, erindex int64, oute error) {
 	for i, layer := range mlp.layers {
 		outb, oute = layer.is_ready()
 		if !outb {
-			return outb, int32(i), oute
+			return outb, int64(i), oute
 		}
 	}
 	return outb, 0, oute
@@ -188,9 +195,16 @@ func IndividualCostMSE(actual []float64, expected []float64) []float64 {
 type ActivationFunction interface {
 	eval(float64) float64
 	derivative(float64) float64
+	id() [8]byte
 }
 
-type SigmoidActFun struct{}
+type SigmoidActFun struct {
+}
+
+func (saf SigmoidActFun) id() (out [8]byte) {
+	copy(out[:], "sigmoid")
+	return out
+}
 
 func (saf SigmoidActFun) eval(in float64) float64 {
 	return 1 / (1 + math.Exp(0-in))
@@ -202,45 +216,45 @@ func (saf SigmoidActFun) derivative(in float64) float64 {
 
 type Layer interface {
 	evaluate(input []float64) (output []float64, err error)
-	inputShape() int32
+	inputShape() int64
 	is_ready() (bool, error)
 }
 
 type OutputLayer struct {
-	input_shape int32
+	input_shape int64
 	biases      []float64
 	act_fun     ActivationFunction
 }
 
-func build_OutputLayer(neuron_count int32, act_fun ActivationFunction) (ol OutputLayer) {
+func build_OutputLayer(neuron_count int64, act_fun ActivationFunction) (ol OutputLayer) {
 	ol.input_shape = neuron_count
 	ol.act_fun = act_fun
 	ol.biases = make([]float64, neuron_count)
-	for index := 0; int32(index) < neuron_count; index++ {
+	for index := 0; int64(index) < neuron_count; index++ {
 		ol.biases[index] = rand.Float64()
 	}
 	return ol
 }
 
 func (ol OutputLayer) is_ready() (bool, error) {
-	if ol.input_shape == int32(len(ol.biases)) {
+	if ol.input_shape == int64(len(ol.biases)) {
 		return false, errors.New("number of biases does not match the input shape")
 	}
 	return true, nil
 }
 
-func (ol OutputLayer) inputShape() int32 {
+func (ol OutputLayer) inputShape() int64 {
 	return ol.input_shape
 }
 
 func (ol OutputLayer) evaluate(input []float64) (output []float64, err error) {
-	if int32(len(input)) != ol.input_shape {
+	if int64(len(input)) != ol.input_shape {
 		return nil, errors.New(fmt.Sprintf("input does not match input shape \n\texpected input shape:%v\n\tactual input shape:%v", ol.input_shape, len(input)))
 	}
 
 	output = make([]float64, ol.input_shape)
 
-	for i := 0; int32(i) < ol.input_shape; i++ {
+	for i := 0; int64(i) < ol.input_shape; i++ {
 		output[i] = ol.act_fun.eval(input[i])
 	}
 
@@ -249,25 +263,25 @@ func (ol OutputLayer) evaluate(input []float64) (output []float64, err error) {
 
 type PerceptronLayer struct {
 	next_layer  Layer
-	input_shape int32
+	input_shape int64
 	out_weights [][]float64
 	biases      []float64
 	act_fun     ActivationFunction
 	initialized bool
 }
 
-func build_PerceptronLayer(neuron_count int32, act_fun ActivationFunction) (pl PerceptronLayer) {
+func build_PerceptronLayer(neuron_count int64, act_fun ActivationFunction) (pl PerceptronLayer) {
 	pl.input_shape = neuron_count
 	pl.act_fun = act_fun
 	pl.biases = make([]float64, neuron_count)
-	for index := 0; int32(index) < neuron_count; index++ {
+	for index := 0; int64(index) < neuron_count; index++ {
 		pl.biases[index] = rand.Float64()
 	}
 	return pl
 
 }
 
-func (pl PerceptronLayer) inputShape() int32 {
+func (pl PerceptronLayer) inputShape() int64 {
 	return pl.input_shape
 }
 
@@ -291,9 +305,9 @@ func (pl PerceptronLayer) link(next_layer Layer) PerceptronLayer {
 
 	pl.out_weights = make([][]float64, pl.input_shape)
 	pl.next_layer = next_layer
-	for i := 0; int32(i) < pl.input_shape; i++ {
+	for i := 0; int64(i) < pl.input_shape; i++ {
 		pl.out_weights[i] = make([]float64, pl.next_layer.inputShape())
-		for j := 0; int32(j) < pl.next_layer.inputShape(); j++ {
+		for j := 0; int64(j) < pl.next_layer.inputShape(); j++ {
 			pl.out_weights[i][j] = rand.Float64()
 		}
 	}
@@ -306,7 +320,7 @@ func (pl PerceptronLayer) is_ready() (bool, error) {
 	if pl.biases == nil {
 		return false, errors.New("PerceptronLayer has no biases / neurons")
 	}
-	if pl.input_shape != int32(len(pl.biases)) {
+	if pl.input_shape != int64(len(pl.biases)) {
 		return false, errors.New("PerceptronLayer input_shape does not match # of biases / neurons")
 	}
 
@@ -329,9 +343,9 @@ func (pl PerceptronLayer) is_ready() (bool, error) {
 		return false, errors.New(fmt.Sprintf("%s %s has no output_weights", err_base, err_conn))
 	}
 
-	weight_current_layer_dim := int32(len(pl.out_weights))
+	weight_current_layer_dim := int64(len(pl.out_weights))
 	if weight_current_layer_dim == pl.inputShape() {
-		weight_next_layer_dim := int32(len(pl.out_weights[0]))
+		weight_next_layer_dim := int64(len(pl.out_weights[0]))
 		if weight_next_layer_dim != pl.next_layer.inputShape() {
 			return false, errors.New(fmt.Sprintf("Incorrect output shape: \n\tNext Layer Input: %v \n\tWeight Matrix output shape :%v", weight_next_layer_dim, pl.next_layer.inputShape()))
 		}
@@ -356,7 +370,7 @@ func (pl PerceptronLayer) evaluate(input []float64) (output []float64, err error
 
 	//for speed it will probably be useful to not have to count len(biases) every time, so we will store that in the input_shape variable
 
-	for out_index := 0; int32(out_index) < pl.next_layer.inputShape(); out_index++ {
+	for out_index := 0; int64(out_index) < pl.next_layer.inputShape(); out_index++ {
 		for index, out := range neuron_output {
 			output[out_index] += out * pl.out_weights[index][out_index]
 		}
@@ -364,7 +378,7 @@ func (pl PerceptronLayer) evaluate(input []float64) (output []float64, err error
 	return output, nil
 }
 
-func InitMLP(node_count []int32, output_shape int32) (mlp MultiLayeredPerceptron, _ error) {
+func InitMLP(node_count []int64, output_shape int64) (mlp MultiLayeredPerceptron, _ error) {
 	saf := SigmoidActFun{}
 	for _, nodes := range node_count {
 		mlp.layers = append(mlp.layers, build_PerceptronLayer(nodes, saf))
